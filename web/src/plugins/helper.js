@@ -1,4 +1,5 @@
 // import { Message } from "element-ui";
+import { getCache } from "../plugins/cache";
 
 export const formatSize = function(value, scale) {
   if (value == null || value == "") {
@@ -72,47 +73,28 @@ export const LimitResquest = function(limit, process) {
   return handler;
 };
 
-export const networkFirstRequest = async function(
-  requestFunc,
-  cacheKey,
-  forceCache
-) {
+export const networkFirstRequest = async function(requestFunc, cacheKey) {
   cacheKey = "localCache@" + cacheKey;
-  const res = await requestFunc().catch(err => {
+  const res = await requestFunc().catch(() => {
     // 请求出错，使用缓存
-    if (forceCache || !window.serviceWorkerReady) {
-      // 使用新的异步存储
-      return window.$cacheStorage
-        .getItem(cacheKey)
-        .then(cacheResponse => {
-          if (cacheResponse) {
-            return { data: cacheResponse };
-          }
-        })
-        .catch(err => {
-          // 兼容旧逻辑
-          try {
-            let cacheResponse =
-              window.localStorage && window.localStorage.getItem(cacheKey);
-            if (cacheResponse) {
-              cacheResponse = JSON.parse(cacheResponse);
-              if (cacheResponse) {
-                return { data: cacheResponse };
-              }
-            }
-          } catch (error) {
-            //
-          }
-          throw err;
-        });
-    }
-    throw err;
+    // 使用新的异步存储
+    return window.$cacheStorage
+      .getItem(cacheKey)
+      .then(cacheResponse => {
+        if (cacheResponse) {
+          return { data: cacheResponse };
+        }
+      })
+      .catch(err => {
+        // 兼容旧逻辑
+        const cacheResponse = getCache(cacheKey);
+        if (cacheResponse) {
+          return { data: cacheResponse };
+        }
+        throw err;
+      });
   });
-  if (
-    (forceCache || !window.serviceWorkerReady) &&
-    res.data &&
-    res.data.isSuccess
-  ) {
+  if (res.data && res.data.isSuccess) {
     // 使用新的异步存储
     window.$cacheStorage.setItem(cacheKey, res.data).catch(() => {});
   }
@@ -122,51 +104,33 @@ export const networkFirstRequest = async function(
 export const cacheFirstRequest = async function(
   requestFunc,
   cacheKey,
-  validateCache,
-  forceCache
+  validateCache
 ) {
   cacheKey = "localCache@" + cacheKey;
   // validateCache === true 时，直接刷新缓存
   if (validateCache !== true) {
-    if (forceCache || !window.serviceWorkerReady) {
-      let cacheResponse = await window.$cacheStorage
-        .getItem(cacheKey)
-        .then(cacheResponse => {
-          if (cacheResponse) {
-            return cacheResponse;
-          }
-          // console.log("Cache not found in new cache");
-          throw new Error("Cache not found");
-        })
-        .catch(() => {
-          // 兼容旧逻辑
-          try {
-            let cacheResponse =
-              window.localStorage && window.localStorage.getItem(cacheKey);
-            if (cacheResponse) {
-              cacheResponse = JSON.parse(cacheResponse);
-              if (cacheResponse) {
-                return cacheResponse;
-              }
-            }
-          } catch (error) {
-            //
-          }
-          return null;
-        });
-      if (cacheResponse) {
-        if (!validateCache || (validateCache && validateCache(cacheResponse))) {
-          return { data: cacheResponse };
+    let cacheResponse = await window.$cacheStorage
+      .getItem(cacheKey)
+      .then(cacheResponse => {
+        if (cacheResponse) {
+          return cacheResponse;
         }
+        // console.log("Cache not found in new cache");
+        throw new Error("Cache not found");
+      })
+      .catch(() => {
+        // 兼容旧逻辑
+        const cacheResponse = getCache(cacheKey);
+        return cacheResponse;
+      });
+    if (cacheResponse) {
+      if (!validateCache || (validateCache && validateCache(cacheResponse))) {
+        return { data: cacheResponse };
       }
     }
   }
   const res = await requestFunc();
-  if (
-    (forceCache || !window.serviceWorkerReady) &&
-    res.data &&
-    res.data.isSuccess
-  ) {
+  if (res.data && res.data.isSuccess) {
     // 使用新的异步存储
     window.$cacheStorage.setItem(cacheKey, res.data).catch(() => {});
   }

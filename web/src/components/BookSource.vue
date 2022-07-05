@@ -94,6 +94,9 @@ export default {
         c[v.bookUrl] = v;
         return c;
       }, {});
+    },
+    readingBook() {
+      return this.$store.state.readingBook || {};
     }
   },
   mounted() {},
@@ -102,6 +105,11 @@ export default {
       if (isVisible) {
         this.getBookSource();
       }
+    },
+    readingBook(val, oldVal) {
+      if (val.bookUrl !== oldVal.bookUrl) {
+        this.bookSourceGroupIndexMap = {};
+      }
     }
   },
   methods: {
@@ -109,11 +117,9 @@ export default {
       return searchBook.bookUrl == this.$store.state.readingBook.bookUrl;
     },
     getBookSource(refresh) {
-      Axios.get(this.api + `/getBookSource`, {
-        params: {
-          url: this.$store.state.readingBook.bookUrl,
-          refresh: refresh ? 1 : 0
-        }
+      Axios.post(this.api + `/getAvailableBookSource`, {
+        url: this.$store.state.readingBook.bookUrl,
+        refresh: refresh ? 1 : 0
       }).then(
         res => {
           this.loading = false;
@@ -139,8 +145,15 @@ export default {
         }
       );
     },
-    changeBookSource(searchBook) {
-      Axios.post(this.api + `/saveBookSource`, {
+    async changeBookSource(searchBook) {
+      const isInShelf = await this.$root.$children[0].isInShelf(
+        this.$store.state.readingBook,
+        "加入书架之后才能切换书源, 是否加入书架?"
+      );
+      if (!isInShelf) {
+        return;
+      }
+      Axios.post(this.api + `/setBookSource`, {
         bookUrl: this.$store.state.readingBook.bookUrl,
         newUrl: searchBook.bookUrl,
         bookSourceUrl: searchBook.origin
@@ -188,12 +201,10 @@ export default {
     loadMoreSource() {
       if (this.loadingMore) return;
       this.loadingMore = true;
-      Axios.get(this.api + `/searchBookSource`, {
-        params: {
-          url: this.$store.state.readingBook.bookUrl,
-          bookSourceGroup: this.bookSourceGroup,
-          lastIndex: this.bookSourceGroupIndexMap[this.bookSourceGroup]
-        }
+      Axios.post(this.api + `/searchBookSource`, {
+        url: this.$store.state.readingBook.bookUrl,
+        bookSourceGroup: this.bookSourceGroup,
+        lastIndex: this.bookSourceGroupIndexMap[this.bookSourceGroup]
       }).then(
         res => {
           this.loadingMore = false;
